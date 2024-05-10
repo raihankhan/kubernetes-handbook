@@ -4,12 +4,15 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/util/homedir"
+	"k8s.io/klog/v2"
 	"path/filepath"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/clientcmd"
+	cu "kmodules.xyz/client-go/client"
 )
 
 func main() {
@@ -27,19 +30,41 @@ func main() {
 		panic(err)
 	}
 
-	// create the clientset
-	clientset, err := kubernetes.NewForConfig(config)
+	// create the kubebuilder uncached client
+	client, err := cu.NewUncachedClient(config)
 	if err != nil {
-		panic(err)
+		klog.Error("Failed to create kubebuilder client", err)
+		return
 	}
 
-	nodeList, err := clientset.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
-
+	nodeList := &corev1.NodeList{}
+	err = client.List(context.TODO(), nodeList)
 	if err != nil {
-		panic(err)
+		klog.Error("Failed to Get node list", err)
+		return
 	}
 
+	fmt.Println("List of nodes in the cluster (Fetched using Kubebuilder Client)")
 	for _, node := range nodeList.Items {
 		fmt.Printf("%s\n", node.Name)
 	}
+
+	// create the clientset
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		klog.Error("Failed to create kubernetes client", err)
+		return
+	}
+
+	nodeList, err = clientset.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		klog.Error("Failed to Get node list", err)
+		return
+	}
+
+	fmt.Println("List of nodes in the cluster (Fetched using Kubernetes Client)")
+	for _, node := range nodeList.Items {
+		fmt.Printf("%s\n", node.Name)
+	}
+
 }
